@@ -21,16 +21,19 @@ class RLM_REPL(RLM):
     
     def __init__(self, 
                  api_key: Optional[str] = None, 
-                 model: str = "gpt-5",
-                 recursive_model: str = "gpt-5",
+                 model: str = "qwen2.5:7b",
+                 recursive_model: str = "qwen2.5:7b",
                  max_iterations: int = 20,
                  depth: int = 0,
                  enable_logging: bool = False,
                  ):
-        self.api_key = api_key
+        
         self.model = model
         self.recursive_model = recursive_model
-        self.llm = OpenAIClient(api_key, model) # Replace with other client
+        
+       
+        from rlm.utils.llm import OpenAIClient
+        self.llm = OpenAIClient(model=model) # Replace with other client
         
         # Track recursive call depth to prevent infinite loops
         self.repl_env = None
@@ -110,6 +113,9 @@ class RLM_REPL(RLM):
             if final_answer:
                 self.logger.log_final_response(final_answer)
                 return final_answer
+            # 🔴 TERMINATION CHECK (ADD THIS)
+            if "answer" in self.repl_env.locals:
+               return f"FINAL_VAR(answer)"
 
             
         # If we reach here, no final answer was found in any iteration

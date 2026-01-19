@@ -15,17 +15,15 @@ from rlm import RLM
 class Sub_RLM(RLM):
     """Recursive LLM client for REPL environment with fixed configuration."""
     
-    def __init__(self, model: str = "gpt-5"):
+    def __init__(self, model: str = "qwen2.5:7b"):
         # Configuration - model can be specified
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        
         
         self.model = model
 
         # Initialize OpenAI client
         from rlm.utils.llm import OpenAIClient
-        self.client = OpenAIClient(api_key=self.api_key, model=model)
+        self.client = OpenAIClient(model=model)
         
     
     def completion(self, prompt) -> str:
@@ -192,7 +190,18 @@ class REPLEnv:
                 return f"Error retrieving variable '{variable_name}': {str(e)}"
         
         self.globals['FINAL_VAR'] = final_var
+
+        def FINAL(value):
+            """
+            Return a literal final answer.
+            This is used when the model already computed the value
+            and wants to return it directly.
+            """
+            return str(value)
         
+        self.globals['FINAL'] = FINAL
+
+
         # Finally, run any setup code if provided
         if setup_code:
             self.code_execution(setup_code)
@@ -208,7 +217,7 @@ class REPLEnv:
                 f"with open(r'{context_path}', 'r') as f:\n"
                 f"    context = json.load(f)\n"
             )
-            self.code_execution(context_code)
+            self.code_execution(context_code, allow_context_write=True)
         
         if context_str is not None:
             context_path = os.path.join(self.temp_dir, "context.txt")
@@ -219,7 +228,7 @@ class REPLEnv:
                 f"with open(r'{context_path}', 'r') as f:\n"
                 f"    context = f.read()\n"
             )
-            self.code_execution(context_code)
+            self.code_execution(context_code, allow_context_write=True)
     
     def __del__(self):
         """Clean up temporary directory when object is destroyed"""
@@ -261,10 +270,30 @@ class REPLEnv:
         finally:
             os.chdir(old_cwd)
     
-    def code_execution(self, code) -> REPLResult:
+    def code_execution(self, code, allow_context_write: bool = False) -> REPLResult:
         """
         Simple code execution "notebook-style" in a REPL environment.
         """
+        # ---------- RLM SAFETY GUARDS ----------
+        for line in code.splitlines():
+          stripped = line.strip()
+
+    # Block overwriting context
+          # Block overwriting context (unless explicitly allowed)
+          if not allow_context_write and stripped.startswith("context ="):
+           raise RuntimeError("❌ Forbidden: overwriting `context` is not allowed")
+
+    # Block FINAL_VAR execution inside REPL
+          if "FINAL_VAR(" in stripped:
+           raise RuntimeError("❌ Forbidden: FINAL_VAR must not be executed inside REPL")
+
+    # Block constant guessing (simple heuristic)
+          # Block constant guessing (simple heuristic)
+          if "=" in stripped:
+           lhs, rhs = stripped.split("=", 1)
+           if rhs.strip().isdigit():
+            raise RuntimeError(" Forbidden: assigning constant numbers is not allowed")
+# --------------------------------------
         start_time = time.time()
         with self._capture_output() as (stdout_buffer, stderr_buffer):
             with self._temp_working_directory():

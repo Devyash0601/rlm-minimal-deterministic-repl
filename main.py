@@ -27,8 +27,8 @@ def main():
     context = generate_massive_context(num_lines=1_000_000, answer=answer)
 
     rlm = RLM_REPL(
-        model="gpt-5",
-        recursive_model="gpt-5-nano",
+        model="qwen2.5:7b",
+        recursive_model="qwen2.5:7b",
         enable_logging=True,
         max_iterations=10
     )
